@@ -9,6 +9,18 @@ $getPip = Join-Path $tempDir "get-pip.py"
 $pythonUrl = "https://www.python.org/ftp/python/3.12.10/python-3.12.10-embed-amd64.zip"
 $getPipUrl = "https://bootstrap.pypa.io/get-pip.py"
 
+function Invoke-Python {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string[]] $Arguments
+    )
+
+    & $python @Arguments
+    if ($LASTEXITCODE -ne 0) {
+        throw "Python command failed with exit code $LASTEXITCODE."
+    }
+}
+
 Write-Host "Installing the portable Python runtime..."
 New-Item -ItemType Directory -Force -Path $tempDir, $runtimeDir | Out-Null
 
@@ -29,9 +41,13 @@ Set-Content -LiteralPath $pthFile -Value $pthLines -Encoding ASCII
 
 Invoke-WebRequest -Uri $getPipUrl -OutFile $getPip
 $python = Join-Path $pythonDir "python.exe"
-& $python -X utf8 $getPip
-& $python -X utf8 -m pip install --upgrade pip
-& $python -X utf8 -m pip install -r (Join-Path $projectRoot "requirements.txt")
+$env:PYTHONNOUSERSITE = "1"
+$env:PYTHONPATH = ""
+$env:PYTHONHOME = ""
+
+Invoke-Python -Arguments @("-X", "utf8", $getPip)
+Invoke-Python -Arguments @("-X", "utf8", "-m", "pip", "install", "--upgrade", "pip", "setuptools", "wheel")
+Invoke-Python -Arguments @("-X", "utf8", "-m", "pip", "install", "-r", (Join-Path $projectRoot "requirements.txt"))
 
 Write-Host ""
 Write-Host "DepthVista XR runtime installed."

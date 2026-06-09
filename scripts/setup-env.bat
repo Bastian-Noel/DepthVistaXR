@@ -19,6 +19,7 @@ if not exist "%DEPTHVISTA_PYTHON_DIR%\python.exe" (
 
 set "PYTHONUTF8=1"
 set "PYTHONIOENCODING=utf-8"
+set "PYTHONNOUSERSITE=1"
 set "TQDM_ASCII=1"
 set "PYTHONHOME="
 set "PYTHONPATH="
