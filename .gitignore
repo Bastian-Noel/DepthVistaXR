@@ -1,0 +1,56 @@
+# Portable runtime and local installation
+/runtime/
+
+# Downloaded AI models and Torch Hub repositories
+/app/iw3/pretrained_models/
+
+# Local application settings and generated data
+/app/tmp/
+/tmp/
+
+# Python caches and build artifacts
+__pycache__/
+*.py[cod]
+*.pyd
+*.so
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+/build/
+/dist/
+
+# Virtual environments
+.venv/
+venv/
+
+# Logs and local diagnostics
+*.log
+*.dmp
+
+# Editors and operating systems
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Secrets and local environment files
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.pfx
+*.p12
+
+# Large model and media files
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.onnx
+*.mp4
+*.mkv
+*.mov
+*.avi

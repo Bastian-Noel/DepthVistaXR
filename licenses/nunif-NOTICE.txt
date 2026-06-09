@@ -1,0 +1,23 @@
+This distribution contains modified portions of nunif/IW3.
+
+Upstream project:
+https://github.com/nagadomi/nunif
+
+Important upstream attributions:
+
+- nunif/optim/lion.py derives from Google Brain AutoML (Apache-2.0).
+- nunif/training/weight_decay_config.py derives from nanoGPT (MIT).
+- nunif/utils/perlin2d.py derives from perlin-numpy and a PyTorch port (MIT).
+- nunif/modules/fourier_unit.py derives from LaMa and FFC (Apache-2.0).
+- nunif/modules/lpips.py includes a fix adapted from NeuralCompression (MIT).
+- nunif/utils/superpoint.py derives from SuperPoint (MIT).
+- nunif/modules/norm.py includes FastLayerNorm derived from timm (Apache-2.0).
+- nunif/utils/transnetv2.py derives from TransNetV2 (MIT).
+- nunif/utils/u2netp.py derives from U-2-Net (Apache-2.0).
+- IW3 uses or can load forks/checkpoints related to MiDaS, ZoeDepth,
+  Depth Anything, Distill Any Depth, Video Depth Anything, Depth Pro and
+  Depth Anything 3.
+
+Model weights and embedded model repositories retain their own notices and
+licenses. See the root LICENSE and the license files supplied with each model
+or checkpoint.

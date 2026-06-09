@@ -1,0 +1,163 @@
+DepthVista XR - License and Third-Party Notices
+================================================
+
+Copyright (c) 2026 DepthVista XR contributors
+
+1. LICENSE SCOPE
+----------------
+
+DepthVista XR is based on third-party software, primarily nunif and xrplay.
+Each third-party component remains governed by its own license. Nothing in
+this document replaces, restricts, or relicenses rights granted by those
+licenses.
+
+Original DepthVista XR additions and modifications are licensed under the
+Creative Commons Attribution-NonCommercial 4.0 International license
+(CC BY-NC 4.0), unless a source file states otherwise:
+
+https://creativecommons.org/licenses/by-nc/4.0/
+
+This license applies only to material for which the DepthVista XR
+contributors own the necessary rights. It does not apply to unchanged
+third-party code, third-party libraries, AI model code, model weights,
+FFmpeg, PyAV, or other separately licensed material.
+
+Under CC BY-NC 4.0, the covered DepthVista XR material may be shared and
+adapted with attribution, but may not be used for commercial purposes.
+Refer to the complete CC BY-NC 4.0 legal text for the binding terms.
+
+Creative Commons licenses are not specifically designed for software.
+Anyone planning to redistribute, integrate, or commercially license the
+DepthVista XR modifications should obtain appropriate legal advice.
+
+
+2. CORE THIRD-PARTY SOFTWARE
+----------------------------
+
+nunif
+  Copyright (C) 2019-2023 nagadomi
+  License: MIT
+  Repository: https://github.com/nagadomi/nunif
+  Local license: licenses/nunif-MIT.txt
+
+xrplay
+  Copyright (c) 2025 Brandyn Webb
+  License: MIT
+  Repository: https://github.com/brandyn-webb/xrplay
+  Local license: licenses/xrplay-MIT.txt
+
+The original MIT-licensed portions remain usable under the MIT License,
+including for commercial purposes. The CC BY-NC 4.0 terms above apply only
+to the original DepthVista XR additions and modifications.
+
+
+3. OPTIONAL AI MODELS
+---------------------
+
+All AI model weights are optional components. An installation may contain
+weights previously downloaded by the user or installer, but they are not
+covered by the DepthVista XR license. Downloading, storing, or selecting a
+model does not change the license of DepthVista XR or its third-party source
+code. Each model remains governed exclusively by the license supplied by its
+author or distributor.
+
+Some supported models permit commercial use, while others are restricted to
+non-commercial use. Model licenses may also differ between sizes, variants,
+checkpoints, or repositories belonging to the same model family.
+
+Known examples include:
+
+Depth Anything
+  - Depth Anything V1: consult the original repository and checkpoint license.
+    https://github.com/LiheYoung/Depth-Anything
+  - Depth Anything V2 Small: Apache License 2.0 according to its repository.
+  - Depth Anything V2 Base, Large, and Giant: CC BY-NC 4.0 according to its
+    repository.
+    https://github.com/DepthAnything/Depth-Anything-V2
+
+Video Depth Anything
+  - Small: Apache License 2.0 according to its repository.
+  - Base and Large: CC BY-NC 4.0 according to its repository.
+    https://github.com/DepthAnything/Video-Depth-Anything
+
+Distill Any Depth
+  - Consult the repository license and the license of the exact checkpoint.
+  - Checkpoints derived from or initialized using restricted model weights
+    may retain additional restrictions.
+    https://github.com/Westlake-AGI-Lab/Distill-Any-Depth
+
+Depth Anything 3, ZoeDepth, Depth Pro, metric-depth variants, and other
+supported models
+  - Consult the official repository and the exact checkpoint license before
+    downloading, redistributing, or using a model.
+
+This list is informational and is not a substitute for the license shipped
+with a specific checkpoint. If this document conflicts with a model author's
+license, the model author's license controls for that model.
+
+
+4. COMMERCIAL USE
+-----------------
+
+The fact that DepthVista XR can load an optional non-commercial model does
+not make the entire project or all other models non-commercial.
+
+Commercial use must be evaluated separately for:
+
+  1. the original MIT-licensed nunif and xrplay code;
+  2. the CC BY-NC 4.0 DepthVista XR additions and modifications;
+  3. every optional model and checkpoint selected by the user;
+  4. every bundled or dynamically loaded third-party library.
+
+Using a CC BY-NC 4.0 model, such as certain Depth Anything V2 or Video Depth
+Anything variants, remains subject to that model's non-commercial
+restriction. Removing or not downloading those models does not remove the
+separate CC BY-NC 4.0 restriction applying to the original DepthVista XR
+material described in Section 1.
+
+
+5. OTHER THIRD-PARTY COMPONENTS
+-------------------------------
+
+DepthVista XR may use libraries including Dear PyGui, PyTorch, NumPy, Pillow,
+OpenCV, PyAV, and FFmpeg. Their respective copyright notices and licenses
+apply independently.
+
+In particular, the license obligations of a Windows binary distribution may
+differ from those of the Python source code because PyAV or FFmpeg builds can
+enable GPL-licensed components. Distributors must inspect the exact binaries
+they ship and provide all notices, license texts, and source-code offers
+required by those builds.
+
+Common project sources:
+
+  Dear PyGui: https://github.com/hoffstadt/DearPyGui
+  PyTorch:    https://github.com/pytorch/pytorch
+  NumPy:      https://numpy.org/
+  Pillow:     https://python-pillow.org/
+  OpenCV:     https://opencv.org/
+  PyAV:       https://github.com/PyAV-Org/PyAV
+  FFmpeg:     https://ffmpeg.org/
+
+
+6. ATTRIBUTION
+--------------
+
+Redistributions must preserve all applicable copyright notices, license
+texts, attribution requirements, and notices of modification required by
+each component's license.
+
+No third-party author, research team, or project is represented as endorsing
+DepthVista XR.
+
+
+7. DISCLAIMER
+-------------
+
+THE DEPTHVISTA XR MATERIAL IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT. TO
+THE EXTENT PERMITTED BY LAW, THE COPYRIGHT HOLDERS SHALL NOT BE LIABLE FOR
+ANY CLAIM, DAMAGES, OR OTHER LIABILITY ARISING FROM ITS USE.
+
+This document provides project licensing information and is not legal advice.

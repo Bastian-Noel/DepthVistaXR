@@ -1,0 +1,37 @@
+--extra-index-url https://download.pytorch.org/whl/cu128
+
+torch==2.7.1+cu128
+torchvision==0.22.1+cu128
+
+numpy
+pillow
+requests
+tqdm
+scipy
+waitress
+bottle==0.12.25
+diskcache
+psutil
+pyyaml
+platformdirs
+packaging
+filelock
+timm
+av==15.0.0
+pillow_heif
+safetensors
+einops
+omegaconf
+addict
+
+wxpython>=4.0.0
+dearpygui>=2.3.1
+pywin32
+windows_capture==1.4.2
+mss>=10.1.0
+PyOpenGL>=3.1.9
+PyOpenGL_accelerate>=3.1.9
+pyopenxr==1.1.5301
+glfw==2.10.0
+
+wc_cuda @ https://github.com/nagadomi/wc_cuda/releases/download/v0.1.2/wc_cuda-0.1.2-cp310-abi3-win_amd64.whl
