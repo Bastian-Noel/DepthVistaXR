@@ -1,5 +1,5 @@
 #define MyAppName "DepthVista XR"
-#define MyAppVersion "1.0.1"
+#define MyAppVersion "1.0.2"
 #define MyAppPublisher "Bastian Noel"
 #define MyAppExeName "DepthVista-XR.bat"
 
