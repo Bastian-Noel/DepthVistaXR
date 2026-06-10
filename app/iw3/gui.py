@@ -80,7 +80,11 @@ class IW3App(wx.App):
                                   caption=T("Confirm"), style=wx.YES_NO) as dlg:
                 if dlg.ShowModal() == wx.ID_NO:
                     return False
-        set_icon_ex(main_frame, path.join(path.dirname(__file__), "icon.ico"), main_frame.GetTitle())
+        set_icon_ex(
+            main_frame,
+            path.join(path.dirname(__file__), "..", "assets", "depthvista-xr.ico"),
+            main_frame.GetTitle(),
+        )
         self.SetAppName(main_frame.GetTitle())
         main_frame.Show()
         self.SetTopWindow(main_frame)

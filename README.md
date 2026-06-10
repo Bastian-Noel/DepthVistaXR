@@ -26,6 +26,19 @@ weights.
 
 ## Quick installation
 
+### Windows installer
+
+Build the network installer with:
+
+```powershell
+winget install JRSoftware.InnoSetup
+.\scripts\build-installer.ps1
+```
+
+The generated `dist\DepthVistaXR-Setup-<version>.exe` installs the application
+for the current user, downloads the portable Python/CUDA runtime, creates
+shortcuts, and registers a Windows uninstaller.
+
 ### Release package
 
 1. Extract or copy the complete folder to a writable location such as

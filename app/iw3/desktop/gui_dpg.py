@@ -200,6 +200,11 @@ class DepthVistaApp:
                 tag="source_preview_texture",
             )
         dpg.create_viewport(title=APP_NAME, width=780, height=760, min_width=650)
+        icon_path = os.path.join(
+            os.path.dirname(__file__), "..", "..", "assets", "depthvista-xr.ico"
+        )
+        dpg.set_viewport_small_icon(icon_path)
+        dpg.set_viewport_large_icon(icon_path)
 
         with dpg.window(tag="main_window", label=APP_NAME):
             dpg.add_text(self.t("tagline"), tag="tagline")
