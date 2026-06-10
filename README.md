@@ -2,6 +2,21 @@
 
 Languages: **English** · [Français](readme/FR.md)
 
+> [!IMPORTANT]
+> ## Easy installation for non-developers
+>
+> Download the latest Windows installer:
+> **[DepthVistaXR-Setup-1.0.1.exe](https://github.com/Bastian-Noel/DepthVistaXR/releases/download/v1.0.1/DepthVistaXR-Setup-1.0.1.exe)**
+>
+> Windows may display a SmartScreen warning because the installer is not
+> digitally signed. Click **More info**, then **Run anyway** if you downloaded
+> it from this official GitHub repository.
+>
+> During installation, a terminal window downloads and installs Python, CUDA,
+> and the required dependencies. **Do not close this terminal window.** The
+> download is several gigabytes and may take some time. Wait until the
+> installation finishes completely before launching DepthVista XR.
+
 DepthVista XR captures a Windows display or application window, estimates its
 depth, generates a stereoscopic image in real time, and displays it in an
 OpenXR headset.
