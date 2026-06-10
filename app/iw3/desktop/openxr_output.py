@@ -7,6 +7,7 @@ import time
 import traceback
 
 import numpy as np
+from PIL import Image
 import torch
 
 try:
@@ -89,6 +90,13 @@ class OpenXROutput:
         pointer_enabled=True,
         right_click_enabled=True,
         pointer_rect=None,
+        room_enabled=False,
+        room_image="",
+        room_depth="",
+        room_radius=10.0,
+        room_depth_strength=0.3,
+        room_depth_invert=False,
+        room_darkness=0.0,
         status_callback=None,
     ):
         self.settings_lock = threading.Lock()
@@ -103,6 +111,13 @@ class OpenXROutput:
             "pointer_enabled": pointer_enabled,
             "right_click_enabled": right_click_enabled,
             "pointer_rect": pointer_rect,
+            "room_enabled": room_enabled,
+            "room_image": room_image,
+            "room_depth": room_depth,
+            "room_radius": room_radius,
+            "room_depth_strength": room_depth_strength,
+            "room_depth_invert": room_depth_invert,
+            "room_darkness": room_darkness,
         }
         self.status_callback = status_callback
         self.frame_slot = LatestFrameSlot()
@@ -294,6 +309,14 @@ class OpenXRRenderer:
         self.screen_positions = None
         self.screen_uvs = None
         self.screen_indices = None
+        self.room_program = None
+        self.room_vao = None
+        self.room_vbo = None
+        self.room_ebo = None
+        self.room_index_count = 0
+        self.room_color_texture = None
+        self.room_depth_texture = None
+        self.room_asset_key = None
 
     def run(self):
         self._init_modules()
@@ -629,6 +652,192 @@ class OpenXRRenderer:
         gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_MAG_FILTER, gl.GL_LINEAR)
         gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_WRAP_S, gl.GL_CLAMP_TO_EDGE)
         gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_WRAP_T, gl.GL_CLAMP_TO_EDGE)
+        self._init_room_renderer()
+
+    def _init_room_renderer(self):
+        gl = self.gl
+        vertex_shader = self._compile_shader(
+            gl.GL_VERTEX_SHADER,
+            """
+            #version 450 core
+            layout(location = 0) in vec3 in_position;
+            layout(location = 1) in vec2 in_uv;
+            uniform mat4 mvp;
+            uniform float room_radius;
+            out vec2 uv;
+            void main() {
+                uv = in_uv;
+                gl_Position = mvp * vec4(in_position * room_radius, 1.0);
+            }
+            """,
+        )
+        fragment_shader = self._compile_shader(
+            gl.GL_FRAGMENT_SHADER,
+            """
+            #version 450 core
+            in vec2 uv;
+            uniform sampler2D room_color;
+            uniform sampler2D room_depth;
+            uniform float eye_sign;
+            uniform float depth_strength;
+            uniform float room_darkness;
+            uniform int depth_invert;
+            out vec4 out_color;
+            void main() {
+                float depth = texture(
+                    room_depth, vec2(uv.x, 1.0 - uv.y)
+                ).r;
+                if (depth_invert != 0) depth = 1.0 - depth;
+                float centered_depth = smoothstep(0.05, 0.95, depth) - 0.5;
+                float parallax = eye_sign * centered_depth
+                    * min(depth_strength, 2.0) * 0.012;
+                vec2 color_uv = vec2(fract(uv.x + parallax), 1.0 - uv.y);
+                vec3 color = texture(room_color, color_uv).rgb;
+                out_color = vec4(
+                    color * (1.0 - clamp(room_darkness, 0.0, 1.0)),
+                    1.0
+                );
+            }
+            """,
+        )
+        self.room_program = gl.glCreateProgram()
+        gl.glAttachShader(self.room_program, vertex_shader)
+        gl.glAttachShader(self.room_program, fragment_shader)
+        gl.glLinkProgram(self.room_program)
+        if not gl.glGetProgramiv(self.room_program, gl.GL_LINK_STATUS):
+            raise RuntimeError(
+                gl.glGetProgramInfoLog(self.room_program).decode(
+                    "utf-8", errors="replace"
+                )
+            )
+        gl.glDeleteShader(vertex_shader)
+        gl.glDeleteShader(fragment_shader)
+
+        longitude_segments = 128
+        latitude_segments = 64
+        vertices = []
+        indices = []
+        for latitude in range(latitude_segments + 1):
+            v = latitude / latitude_segments
+            phi = (v - 0.5) * math.pi
+            cos_phi = math.cos(phi)
+            for longitude in range(longitude_segments + 1):
+                u = longitude / longitude_segments
+                theta = (u - 0.5) * math.tau
+                vertices.extend(
+                    (
+                        math.sin(theta) * cos_phi,
+                        math.sin(phi),
+                        -math.cos(theta) * cos_phi,
+                        u,
+                        v,
+                    )
+                )
+        row_size = longitude_segments + 1
+        for latitude in range(latitude_segments):
+            for longitude in range(longitude_segments):
+                top_left = latitude * row_size + longitude
+                bottom_left = top_left + row_size
+                indices.extend(
+                    (
+                        top_left,
+                        bottom_left,
+                        top_left + 1,
+                        top_left + 1,
+                        bottom_left,
+                        bottom_left + 1,
+                    )
+                )
+
+        vertices = np.asarray(vertices, dtype=np.float32)
+        indices = np.asarray(indices, dtype=np.uint32)
+        self.room_vao = gl.glGenVertexArrays(1)
+        self.room_vbo = gl.glGenBuffers(1)
+        self.room_ebo = gl.glGenBuffers(1)
+        gl.glBindVertexArray(self.room_vao)
+        gl.glBindBuffer(gl.GL_ARRAY_BUFFER, self.room_vbo)
+        gl.glBufferData(
+            gl.GL_ARRAY_BUFFER, vertices.nbytes, vertices, gl.GL_STATIC_DRAW
+        )
+        gl.glBindBuffer(gl.GL_ELEMENT_ARRAY_BUFFER, self.room_ebo)
+        gl.glBufferData(
+            gl.GL_ELEMENT_ARRAY_BUFFER, indices.nbytes, indices, gl.GL_STATIC_DRAW
+        )
+        stride = 5 * vertices.itemsize
+        gl.glEnableVertexAttribArray(0)
+        gl.glVertexAttribPointer(
+            0, 3, gl.GL_FLOAT, False, stride, ctypes.c_void_p(0)
+        )
+        gl.glEnableVertexAttribArray(1)
+        gl.glVertexAttribPointer(
+            1, 2, gl.GL_FLOAT, False, stride, ctypes.c_void_p(3 * vertices.itemsize)
+        )
+        self.room_index_count = len(indices)
+        gl.glBindVertexArray(0)
+
+    def _ensure_room_assets(self, settings):
+        if not settings.get("room_enabled"):
+            return False
+        color_path = settings.get("room_image", "")
+        depth_path = settings.get("room_depth", "")
+        asset_key = (color_path, depth_path)
+        if asset_key == self.room_asset_key:
+            return self.room_color_texture is not None
+        if not path.isfile(color_path) or not path.isfile(depth_path):
+            self.output._status(
+                "Room", f"Missing panorama or depth map: {color_path}"
+            )
+            return False
+
+        color = np.asarray(
+            Image.open(color_path).convert("RGB"), dtype=np.uint8
+        )
+        depth = np.asarray(
+            Image.open(depth_path).convert("L"), dtype=np.uint8
+        )
+        gl = self.gl
+        if self.room_color_texture is None:
+            self.room_color_texture = gl.glGenTextures(1)
+        if self.room_depth_texture is None:
+            self.room_depth_texture = gl.glGenTextures(1)
+        self._upload_room_texture(
+            self.room_color_texture, color, gl.GL_RGB8, gl.GL_RGB
+        )
+        self._upload_room_texture(
+            self.room_depth_texture, depth, gl.GL_R8, gl.GL_RED
+        )
+        self.room_asset_key = asset_key
+        self.output._status("Room", path.basename(color_path))
+        return True
+
+    def _upload_room_texture(self, texture, image, internal_format, image_format):
+        gl = self.gl
+        height, width = image.shape[:2]
+        gl.glBindTexture(gl.GL_TEXTURE_2D, texture)
+        gl.glPixelStorei(gl.GL_UNPACK_ALIGNMENT, 1)
+        gl.glTexParameteri(
+            gl.GL_TEXTURE_2D, gl.GL_TEXTURE_MIN_FILTER, gl.GL_LINEAR
+        )
+        gl.glTexParameteri(
+            gl.GL_TEXTURE_2D, gl.GL_TEXTURE_MAG_FILTER, gl.GL_LINEAR
+        )
+        gl.glTexParameteri(
+            gl.GL_TEXTURE_2D, gl.GL_TEXTURE_WRAP_S, gl.GL_REPEAT
+        )
+        gl.glTexParameteri(
+            gl.GL_TEXTURE_2D, gl.GL_TEXTURE_WRAP_T, gl.GL_CLAMP_TO_EDGE
+        )
+        gl.glTexImage2D(
+            gl.GL_TEXTURE_2D,
+            0,
+            internal_format,
+            width,
+            height,
+            0,
+            image_format,
+            gl.GL_UNSIGNED_BYTE,
+            image,
+        )
 
     def _compile_shader(self, shader_type, source):
         shader = self.gl.glCreateShader(shader_type)
@@ -1278,35 +1487,10 @@ class OpenXRRenderer:
         gl = self.gl
         settings = self._settings()
         self._update_mesh(settings)
+        room_ready = self._ensure_room_assets(settings)
         projection_views = []
         self.images_acquired = True
 
-        gl.glUseProgram(self.program)
-        gl.glBindVertexArray(self.vao)
-        gl.glActiveTexture(gl.GL_TEXTURE0)
-        gl.glBindTexture(gl.GL_TEXTURE_2D, self.source_texture)
-        gl.glUniform1i(gl.glGetUniformLocation(self.program, "source_texture"), 0)
-        gl.glUniform1f(
-            gl.glGetUniformLocation(self.program, "headset_fps"),
-            self.output.get_fps(),
-        )
-        gl.glUniform1f(
-            gl.glGetUniformLocation(self.program, "generation_fps"),
-            self.output.get_generation_fps(),
-        )
-        gl.glUniform1i(
-            gl.glGetUniformLocation(self.program, "show_fps"),
-            1 if settings["show_fps"] else 0,
-        )
-        gl.glUniform1i(
-            gl.glGetUniformLocation(self.program, "pointer_active"),
-            1 if self.pointer_active else 0,
-        )
-        gl.glUniform2f(
-            gl.glGetUniformLocation(self.program, "pointer_uv"),
-            float(self.pointer_uv[0]),
-            float(self.pointer_uv[1]),
-        )
         gl.glDisable(gl.GL_DEPTH_TEST)
         gl.glDisable(gl.GL_CULL_FACE)
 
@@ -1337,9 +1521,42 @@ class OpenXRRenderer:
             )
             gl.glClearColor(0.0, 0.0, 0.0, 1.0)
             gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT)
-            mvp = self._projection_matrix(view.fov, 0.05, 100.0) @ self._view_matrix(
-                view.pose
+            projection = self._projection_matrix(view.fov, 0.05, 100.0)
+            view_matrix = self._view_matrix(view.pose)
+            if room_ready:
+                self._draw_room(
+                    projection, view_matrix, settings, eye_index
+                )
+
+            gl.glUseProgram(self.program)
+            gl.glBindVertexArray(self.vao)
+            gl.glActiveTexture(gl.GL_TEXTURE0)
+            gl.glBindTexture(gl.GL_TEXTURE_2D, self.source_texture)
+            gl.glUniform1i(
+                gl.glGetUniformLocation(self.program, "source_texture"), 0
             )
+            gl.glUniform1f(
+                gl.glGetUniformLocation(self.program, "headset_fps"),
+                self.output.get_fps(),
+            )
+            gl.glUniform1f(
+                gl.glGetUniformLocation(self.program, "generation_fps"),
+                self.output.get_generation_fps(),
+            )
+            gl.glUniform1i(
+                gl.glGetUniformLocation(self.program, "show_fps"),
+                1 if settings["show_fps"] else 0,
+            )
+            gl.glUniform1i(
+                gl.glGetUniformLocation(self.program, "pointer_active"),
+                1 if self.pointer_active else 0,
+            )
+            gl.glUniform2f(
+                gl.glGetUniformLocation(self.program, "pointer_uv"),
+                float(self.pointer_uv[0]),
+                float(self.pointer_uv[1]),
+            )
+            mvp = projection @ view_matrix
             gl.glUniformMatrix4fv(
                 gl.glGetUniformLocation(self.program, "mvp"),
                 1,
@@ -1391,6 +1608,62 @@ class OpenXRRenderer:
             base_layer,
         )
         return [base_layer]
+
+    def _draw_room(self, projection, view_matrix, settings, eye_index):
+        gl = self.gl
+        model = np.eye(4, dtype=np.float32)
+        yaw_cos = math.cos(self.anchor_yaw)
+        yaw_sin = math.sin(self.anchor_yaw)
+        model[0, 0] = yaw_cos
+        model[0, 2] = yaw_sin
+        model[2, 0] = -yaw_sin
+        model[2, 2] = yaw_cos
+        model[:3, 3] = self.anchor_position
+        mvp = projection @ view_matrix @ model
+        gl.glUseProgram(self.room_program)
+        gl.glBindVertexArray(self.room_vao)
+        gl.glActiveTexture(gl.GL_TEXTURE0)
+        gl.glBindTexture(gl.GL_TEXTURE_2D, self.room_color_texture)
+        gl.glUniform1i(
+            gl.glGetUniformLocation(self.room_program, "room_color"), 0
+        )
+        gl.glActiveTexture(gl.GL_TEXTURE1)
+        gl.glBindTexture(gl.GL_TEXTURE_2D, self.room_depth_texture)
+        gl.glUniform1i(
+            gl.glGetUniformLocation(self.room_program, "room_depth"), 1
+        )
+        gl.glUniform1f(
+            gl.glGetUniformLocation(self.room_program, "eye_sign"),
+            -1.0 if eye_index == 0 else 1.0,
+        )
+        gl.glUniformMatrix4fv(
+            gl.glGetUniformLocation(self.room_program, "mvp"),
+            1,
+            gl.GL_TRUE,
+            mvp.astype(np.float32),
+        )
+        gl.glUniform1f(
+            gl.glGetUniformLocation(self.room_program, "room_radius"),
+            max(4.0, float(settings.get("room_radius", 10.0))),
+        )
+        gl.glUniform1f(
+            gl.glGetUniformLocation(self.room_program, "depth_strength"),
+            max(0.0, float(settings.get("room_depth_strength", 0.3))),
+        )
+        gl.glUniform1i(
+            gl.glGetUniformLocation(self.room_program, "depth_invert"),
+            1 if settings.get("room_depth_invert") else 0,
+        )
+        gl.glUniform1f(
+            gl.glGetUniformLocation(self.room_program, "room_darkness"),
+            max(0.0, min(1.0, float(settings.get("room_darkness", 0.0)))),
+        )
+        gl.glDrawElements(
+            gl.GL_TRIANGLES,
+            self.room_index_count,
+            gl.GL_UNSIGNED_INT,
+            None,
+        )
 
     def _release_images(self):
         if not self.images_acquired:
@@ -1584,8 +1857,20 @@ class OpenXRRenderer:
                 self._delete_upload_pbo()
                 if self.program:
                     self.gl.glDeleteProgram(self.program)
+                if self.room_program:
+                    self.gl.glDeleteProgram(self.room_program)
                 if self.source_texture:
                     self.gl.glDeleteTextures([self.source_texture])
+                room_textures = [
+                    texture
+                    for texture in (
+                        self.room_color_texture,
+                        self.room_depth_texture,
+                    )
+                    if texture
+                ]
+                if room_textures:
+                    self.gl.glDeleteTextures(room_textures)
                 if self.framebuffer:
                     self.gl.glDeleteFramebuffers(1, [self.framebuffer])
                 if self.vbo:
@@ -1594,6 +1879,12 @@ class OpenXRRenderer:
                     self.gl.glDeleteBuffers(1, [self.ebo])
                 if self.vao:
                     self.gl.glDeleteVertexArrays(1, [self.vao])
+                if self.room_vbo:
+                    self.gl.glDeleteBuffers(1, [self.room_vbo])
+                if self.room_ebo:
+                    self.gl.glDeleteBuffers(1, [self.room_ebo])
+                if self.room_vao:
+                    self.gl.glDeleteVertexArrays(1, [self.room_vao])
             except Exception:
                 pass
         if self.xr is not None:

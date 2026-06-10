@@ -43,6 +43,7 @@ Source: "..\app\*"; DestDir: "{app}\app"; Flags: ignoreversion recursesubdirs cr
 Source: "..\scripts\*"; DestDir: "{app}\scripts"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\licenses\*"; DestDir: "{app}\licenses"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\readme\*"; DestDir: "{app}\readme"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\room\*"; DestDir: "{app}\room"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\DepthVista-XR.bat"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\install.bat"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\requirements.txt"; DestDir: "{app}"; Flags: ignoreversion

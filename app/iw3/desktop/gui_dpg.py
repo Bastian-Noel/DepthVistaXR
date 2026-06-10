@@ -56,6 +56,20 @@ PROFILE_KEYS = {
 SOURCE_KEYS = {"screen": "source_screen", "window": "source_window"}
 PROJECTION_KEYS = {"curved": "projection_curved", "flat": "projection_flat"}
 CONTROL_KEYS = {"desktop": "control_desktop", "cinema": "control_cinema"}
+ROOM_DIR = path.abspath(
+    path.join(path.dirname(__file__), "..", "..", "..", "room")
+)
+
+
+def room_choices():
+    if not path.isdir(ROOM_DIR):
+        return []
+    return sorted(
+        path.splitext(filename)[0]
+        for filename in os.listdir(ROOM_DIR)
+        if filename.lower().endswith(".png") and not filename.lower().endswith("_depth.png")
+        and path.isfile(path.join(ROOM_DIR, path.splitext(filename)[0] + "_depth.png"))
+    )
 
 
 class EventBridge:
@@ -89,6 +103,10 @@ class DepthVistaApp:
         self.current_args = None
         self.running = False
         self.config = self._load_config()
+        if not self.config.get("room_defaults_v2"):
+            self.config["room_radius"] = 10.0
+            self.config["room_depth_strength"] = 0.3
+            self.config["room_defaults_v2"] = True
         self.language = self.config.get("language", "en")
         if self.language not in LANGUAGES:
             self.language = "en"
@@ -97,6 +115,7 @@ class DepthVistaApp:
         self.preview_thread = None
         self.preview_selection = None
         self.last_preview_time = 0.0
+        self.session_mode = "openxr"
 
     def _load_config(self):
         try:
@@ -120,6 +139,12 @@ class DepthVistaApp:
                 "show_fps",
                 "control_profile",
                 "right_click_enabled",
+                "room_enabled",
+                "room_choice",
+                "room_radius",
+                "room_depth_strength",
+                "room_depth_invert",
+                "room_darkness",
                 "divergence",
                 "convergence",
                 "depth_model",
@@ -140,6 +165,7 @@ class DepthVistaApp:
                 "control_profile": self.selected_id(
                     "control_profile", CONTROL_KEYS, "desktop"
                 ),
+                "room_defaults_v2": True,
             }
         )
         os.makedirs(path.dirname(CONFIG_PATH), exist_ok=True)
@@ -192,6 +218,11 @@ class DepthVistaApp:
                 dpg.add_theme_color(dpg.mvThemeCol_Button, (180, 45, 45))
                 dpg.add_theme_color(dpg.mvThemeCol_ButtonHovered, (220, 60, 60))
                 dpg.add_theme_color(dpg.mvThemeCol_ButtonActive, (140, 30, 30))
+        with dpg.theme(tag="secondary_button_theme"):
+            with dpg.theme_component(dpg.mvButton):
+                dpg.add_theme_color(dpg.mvThemeCol_Button, (48, 52, 58))
+                dpg.add_theme_color(dpg.mvThemeCol_ButtonHovered, (65, 70, 78))
+                dpg.add_theme_color(dpg.mvThemeCol_ButtonActive, (38, 41, 46))
         with dpg.texture_registry(show=False):
             dpg.add_dynamic_texture(
                 PREVIEW_WIDTH,
@@ -343,6 +374,72 @@ class DepthVistaApp:
                         default_value=bool(self.value("show_fps", False)),
                         callback=self.update_openxr_settings,
                     )
+                    dpg.add_button(
+                        label=self.t("recenter"),
+                        tag="setup_recenter",
+                        callback=self.recenter_openxr,
+                        width=220,
+                    )
+
+                with dpg.tab(label=self.t("room_360"), tag="tab_room"):
+                    dpg.add_checkbox(
+                        label=self.t("enable_room"),
+                        tag="room_enabled",
+                        default_value=bool(self.value("room_enabled", False)),
+                        callback=self.update_room_settings,
+                    )
+                    rooms = room_choices()
+                    default_room = self.value(
+                        "room_choice", rooms[0] if rooms else ""
+                    )
+                    if default_room not in rooms:
+                        default_room = rooms[0] if rooms else ""
+                    dpg.add_combo(
+                        rooms,
+                        default_value=default_room,
+                        tag="room_choice",
+                        label=self.t("room_image"),
+                        width=300,
+                        callback=self.update_room_settings,
+                    )
+                    dpg.add_slider_float(
+                        label=self.t("room_radius"),
+                        tag="room_radius",
+                        default_value=float(self.value("room_radius", 10.0)),
+                        min_value=4.0,
+                        max_value=30.0,
+                        format="%.1f m",
+                        callback=self.update_room_settings,
+                    )
+                    dpg.add_slider_float(
+                        label=self.t("room_depth_strength"),
+                        tag="room_depth_strength",
+                        default_value=float(
+                            self.value("room_depth_strength", 0.3)
+                        ),
+                        min_value=0.0,
+                        max_value=5.0,
+                        format="%.2f",
+                        callback=self.update_room_settings,
+                    )
+                    dpg.add_checkbox(
+                        label=self.t("room_depth_invert"),
+                        tag="room_depth_invert",
+                        default_value=bool(
+                            self.value("room_depth_invert", False)
+                        ),
+                        callback=self.update_room_settings,
+                    )
+                    dpg.add_slider_float(
+                        label=self.t("room_darkness"),
+                        tag="room_darkness",
+                        default_value=float(self.value("room_darkness", 0.0)),
+                        min_value=0.0,
+                        max_value=1.0,
+                        format="%.2f",
+                        callback=self.update_room_settings,
+                    )
+                    dpg.add_text(self.t("room_static_help"), tag="room_static_help")
 
                 with dpg.tab(label=self.t("controllers"), tag="tab_controllers"):
                     control_profile = self.value("control_profile", "desktop")
@@ -416,6 +513,12 @@ class DepthVistaApp:
                 dpg.add_button(
                     label=self.t("start_openxr"), tag="start", callback=self.start
                 )
+                dpg.add_button(
+                    label=self.t("start_sbs"),
+                    tag="start_sbs",
+                    callback=self.start_sbs,
+                )
+                dpg.bind_item_theme("start_sbs", "secondary_button_theme")
 
             with dpg.group(tag="active_interface", show=False):
                 dpg.add_text(
@@ -491,6 +594,56 @@ class DepthVistaApp:
                     tag="active_show_fps",
                     callback=self.active_setting_changed,
                 )
+                dpg.add_separator()
+                dpg.add_text(self.t("room_360"), tag="active_room_title")
+                dpg.add_checkbox(
+                    label=self.t("enable_room"),
+                    tag="active_room_enabled",
+                    callback=self.active_room_setting_changed,
+                )
+                dpg.add_combo(
+                    room_choices(),
+                    tag="active_room_choice",
+                    label=self.t("room_image"),
+                    width=300,
+                    callback=self.active_room_setting_changed,
+                )
+                dpg.add_slider_float(
+                    label=self.t("room_radius"),
+                    tag="active_room_radius",
+                    min_value=4.0,
+                    max_value=30.0,
+                    format="%.1f m",
+                    callback=self.active_room_setting_changed,
+                )
+                dpg.add_slider_float(
+                    label=self.t("room_depth_strength"),
+                    tag="active_room_depth_strength",
+                    min_value=0.0,
+                    max_value=5.0,
+                    format="%.2f",
+                    callback=self.active_room_setting_changed,
+                )
+                dpg.add_checkbox(
+                    label=self.t("room_depth_invert"),
+                    tag="active_room_depth_invert",
+                    callback=self.active_room_setting_changed,
+                )
+                dpg.add_slider_float(
+                    label=self.t("room_darkness"),
+                    tag="active_room_darkness",
+                    min_value=0.0,
+                    max_value=1.0,
+                    format="%.2f",
+                    callback=self.active_room_setting_changed,
+                )
+                dpg.add_button(
+                    label=self.t("recenter"),
+                    tag="active_recenter",
+                    callback=self.recenter_openxr,
+                    width=300,
+                    height=42,
+                )
                 dpg.add_spacer(height=12)
                 dpg.add_button(
                     label=self.t("stop_openxr"),
@@ -551,6 +704,12 @@ class DepthVistaApp:
             "show_fps": "show_fps",
             "control_profile": "configuration",
             "right_click_enabled": "right_click",
+            "room_enabled": "enable_room",
+            "room_choice": "room_image",
+            "room_radius": "room_radius",
+            "room_depth_strength": "room_depth_strength",
+            "room_depth_invert": "room_depth_invert",
+            "room_darkness": "room_darkness",
             "convergence": "convergence",
             "depth_model": "depth_model",
             "method": "method_3d",
@@ -562,12 +721,21 @@ class DepthVistaApp:
             "active_control_profile": "controller_configuration",
             "active_right_click": "right_click",
             "active_show_fps": "show_fps",
+            "active_room_enabled": "enable_room",
+            "active_room_choice": "room_image",
+            "active_room_radius": "room_radius",
+            "active_room_depth_strength": "room_depth_strength",
+            "active_room_depth_invert": "room_depth_invert",
+            "active_room_darkness": "room_darkness",
+            "setup_recenter": "recenter",
+            "active_recenter": "recenter",
         }
         for tag, key in labels.items():
             dpg.configure_item(tag, label=self.t(key))
         tab_labels = {
             "tab_general": "general",
             "tab_controllers": "controllers",
+            "tab_room": "room_360",
             "tab_advanced": "advanced",
             "tab_state": "state",
         }
@@ -577,7 +745,10 @@ class DepthVistaApp:
             "refresh_sources": "refresh_sources",
             "refresh_preview": "refresh_preview",
             "start": "start_openxr",
-            "stop": "stop_openxr",
+            "start_sbs": "start_sbs",
+            "stop": "stop_openxr"
+            if self.session_mode == "openxr"
+            else "stop_sbs",
         }
         for tag, key in button_labels.items():
             dpg.configure_item(tag, label=self.t(key))
@@ -589,11 +760,18 @@ class DepthVistaApp:
             "cinema_help": "cinema_help",
             "buttons_help": "buttons_help",
             "stick_help": "stick_help",
-            "active_title": "active_session",
             "active_depth_strength": "depth_strength",
+            "room_static_help": "room_static_help",
+            "active_room_title": "room_360",
         }
         for tag, key in text_values.items():
             dpg.set_value(tag, self.t(key))
+        dpg.set_value(
+            "active_title",
+            self.t("active_session")
+            if self.session_mode == "openxr"
+            else self.t("active_sbs_session"),
+        )
         dpg.configure_item("profile", items=self.labels(PROFILE_KEYS))
         dpg.set_value("profile", self.label_for(profile, PROFILE_KEYS, "balanced"))
         dpg.configure_item("source_type", items=self.labels(SOURCE_KEYS))
@@ -773,6 +951,14 @@ class DepthVistaApp:
             "active_control_profile": dpg.get_value("control_profile"),
             "active_right_click": dpg.get_value("right_click_enabled"),
             "active_show_fps": dpg.get_value("show_fps"),
+            "active_room_enabled": dpg.get_value("room_enabled"),
+            "active_room_choice": dpg.get_value("room_choice"),
+            "active_room_radius": dpg.get_value("room_radius"),
+            "active_room_depth_strength": dpg.get_value(
+                "room_depth_strength"
+            ),
+            "active_room_depth_invert": dpg.get_value("room_depth_invert"),
+            "active_room_darkness": dpg.get_value("room_darkness"),
         }
         for tag, value in values.items():
             dpg.set_value(tag, value)
@@ -806,7 +992,24 @@ class DepthVistaApp:
         dpg.configure_item("right_click_enabled", show=desktop)
         self.update_openxr_settings()
 
-    def build_args(self):
+    def active_room_setting_changed(self, *_args):
+        dpg.set_value("room_enabled", dpg.get_value("active_room_enabled"))
+        dpg.set_value("room_choice", dpg.get_value("active_room_choice"))
+        dpg.set_value("room_radius", dpg.get_value("active_room_radius"))
+        dpg.set_value(
+            "room_depth_strength",
+            dpg.get_value("active_room_depth_strength"),
+        )
+        dpg.set_value(
+            "room_depth_invert",
+            dpg.get_value("active_room_depth_invert"),
+        )
+        dpg.set_value(
+            "room_darkness", dpg.get_value("active_room_darkness")
+        )
+        self.update_room_settings()
+
+    def build_args(self, output_mode="openxr"):
         parser = create_parser()
         args = parser.parse_args([])
         source_type = self.selected_id("source_type", SOURCE_KEYS, "screen")
@@ -828,8 +1031,8 @@ class DepthVistaApp:
                 ),
             )
 
-        args.openxr = True
-        args.local_viewer = False
+        args.openxr = output_mode == "openxr"
+        args.local_viewer = output_mode == "sbs"
         args.openxr_projection = self.selected_id(
             "projection", PROJECTION_KEYS, "curved"
         )
@@ -843,6 +1046,22 @@ class DepthVistaApp:
         )
         args.openxr_pointer = args.openxr_control_profile == "desktop"
         args.openxr_right_click = bool(dpg.get_value("right_click_enabled"))
+        room_name = dpg.get_value("room_choice")
+        args.openxr_room_enabled = bool(dpg.get_value("room_enabled"))
+        args.openxr_room_image = (
+            path.join(ROOM_DIR, f"{room_name}.png") if room_name else ""
+        )
+        args.openxr_room_depth = (
+            path.join(ROOM_DIR, f"{room_name}_depth.png") if room_name else ""
+        )
+        args.openxr_room_radius = float(dpg.get_value("room_radius"))
+        args.openxr_room_depth_strength = float(
+            dpg.get_value("room_depth_strength")
+        )
+        args.openxr_room_depth_invert = bool(
+            dpg.get_value("room_depth_invert")
+        )
+        args.openxr_room_darkness = float(dpg.get_value("room_darkness"))
         args.stream_height = int(dpg.get_value("output_resolution"))
         profile = PROFILES[self.selected_id("profile", PROFILE_KEYS, "balanced")]
         args.stream_fps = profile["fps"]
@@ -879,21 +1098,35 @@ class DepthVistaApp:
         )
         return args
 
-    def start(self):
+    def start(self, *_args, output_mode="openxr"):
         if self.running:
             return
         self._save_config()
         self.stop_event.clear()
         try:
-            args = self.build_args()
+            args = self.build_args(output_mode)
         except Exception:
             self.append_log(traceback.format_exc())
             return
         self.running = True
+        self.session_mode = output_mode
         self.current_args = args
         dpg.set_value("status", self.t("starting"))
         dpg.set_value("active_status", self.t("starting"))
         self.set_session_interface(True)
+        dpg.set_value(
+            "active_title",
+            self.t("active_session")
+            if output_mode == "openxr"
+            else self.t("active_sbs_session"),
+        )
+        dpg.configure_item(
+            "stop",
+            label=self.t("stop_openxr")
+            if output_mode == "openxr"
+            else self.t("stop_sbs"),
+        )
+        dpg.configure_item("active_recenter", show=output_mode == "openxr")
 
         def worker():
             try:
@@ -907,10 +1140,24 @@ class DepthVistaApp:
         self.worker = threading.Thread(target=worker, name="depthvista-worker", daemon=True)
         self.worker.start()
 
+    def start_sbs(self, *_args):
+        self.start(output_mode="sbs")
+
     def stop(self):
         self.stop_event.set()
         dpg.set_value("status", self.t("stopping"))
         dpg.set_value("active_status", self.t("stopping"))
+
+    def recenter_openxr(self, *_args):
+        if self.current_args is None:
+            self.append_log(self.t("recenter_after_start"))
+            return
+        output = self.current_args.state.get("openxr_output")
+        if output is None:
+            self.append_log(self.t("recenter_openxr_only"))
+            return
+        output.recenter()
+        dpg.set_value("active_status", self.t("recentering"))
 
     def append_log(self, message):
         current = dpg.get_value("log")
@@ -996,6 +1243,27 @@ class DepthVistaApp:
                 == "desktop"
             ),
             right_click_enabled=bool(dpg.get_value("right_click_enabled")),
+        )
+
+    def update_room_settings(self, *_args):
+        if self.current_args is None:
+            return
+        output = self.current_args.state.get("openxr_output")
+        if output is None:
+            return
+        room_name = dpg.get_value("room_choice")
+        output.update_settings(
+            room_enabled=bool(dpg.get_value("room_enabled")),
+            room_image=path.join(ROOM_DIR, f"{room_name}.png")
+            if room_name
+            else "",
+            room_depth=path.join(ROOM_DIR, f"{room_name}_depth.png")
+            if room_name
+            else "",
+            room_radius=float(dpg.get_value("room_radius")),
+            room_depth_strength=float(dpg.get_value("room_depth_strength")),
+            room_depth_invert=bool(dpg.get_value("room_depth_invert")),
+            room_darkness=float(dpg.get_value("room_darkness")),
         )
 
     def run(self):

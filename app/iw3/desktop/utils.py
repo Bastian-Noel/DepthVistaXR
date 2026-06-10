@@ -33,6 +33,10 @@ try:
     from .local_viewer import LocalViewer
 except ImportError:
     LocalViewer = None
+try:
+    from .sbs_output import SBSWindowOutput
+except ImportError:
+    SBSWindowOutput = None
 
 
 TORCH_VERSION = Version(torch.__version__)
@@ -181,6 +185,17 @@ def create_parser():
         action=argparse.BooleanOptionalAction,
         default=True,
         help="Enable grip tap as right mouse click in desktop mode",
+    )
+    parser.add_argument("--openxr-room-enabled", action="store_true")
+    parser.add_argument("--openxr-room-image", type=str, default="")
+    parser.add_argument("--openxr-room-depth", type=str, default="")
+    parser.add_argument("--openxr-room-radius", type=float, default=10.0)
+    parser.add_argument("--openxr-room-depth-strength", type=float, default=0.3)
+    parser.add_argument("--openxr-room-darkness", type=float, default=0.0)
+    parser.add_argument(
+        "--openxr-room-depth-invert",
+        action=argparse.BooleanOptionalAction,
+        default=False,
     )
     parser.add_argument("--port", type=int, default=1303,
                         help="HTTP listen port")
@@ -393,6 +408,13 @@ def iw3_desktop_main(args, init_wxapp=True):
             pointer_enabled=args.openxr_pointer,
             right_click_enabled=args.openxr_right_click,
             pointer_rect=pointer_rect,
+            room_enabled=args.openxr_room_enabled,
+            room_image=args.openxr_room_image,
+            room_depth=args.openxr_room_depth,
+            room_radius=args.openxr_room_radius,
+            room_depth_strength=args.openxr_room_depth_strength,
+            room_depth_invert=args.openxr_room_depth_invert,
+            room_darkness=args.openxr_room_darkness,
             status_callback=args.state["openxr_status_callback"],
         )
         args.state["openxr_output"] = server
@@ -414,12 +436,22 @@ def iw3_desktop_main(args, init_wxapp=True):
         )
     else:
         # Local Viewer
-        if LocalViewer is None:
+        viewer_class = (
+            SBSWindowOutput
+            if sys.platform == "win32" and SBSWindowOutput is not None
+            else LocalViewer
+        )
+        if viewer_class is None:
             raise RuntimeError("Local Viewer is not available")
         IS_ROCM = getattr(torch.version, "hip", None) is not None
         USE_CUDA = torch.cuda.is_available() and not IS_ROCM
-        server = LocalViewer(lock=lock, width=output_frame_width, height=output_frame_height,
-                             use_cuda=USE_CUDA, uncap_fps=args.uncap_fps)
+        server = viewer_class(
+            lock=lock,
+            width=output_frame_width,
+            height=output_frame_height,
+            use_cuda=USE_CUDA,
+            uncap_fps=args.uncap_fps,
+        )
 
     screenshot_thread = screenshot_factory(
         fps=args.stream_fps,
